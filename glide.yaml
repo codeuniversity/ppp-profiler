@@ -1,0 +1,5 @@
+package: github.com/codeuniversity/ppp-profiler
+import:
+- package: github.com/codeuniversity/ppp-mhist
+- package: github.com/gorilla/websocket
+  version: ^1.4.0

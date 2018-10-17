@@ -1,0 +1,10 @@
+hash: 678c2a45f32c909f0087cbfb1b5ed17cd0c23ec85a07f2db59ec204c01d5aa9e
+updated: 2018-10-17T19:06:04.503817+02:00
+imports:
+- name: github.com/codeuniversity/ppp-mhist
+  version: 30218bbc30519c3637b50e9fe077d7e566194978
+  subpackages:
+  - tcp
+- name: github.com/gorilla/websocket
+  version: 66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d
+testImports: []
