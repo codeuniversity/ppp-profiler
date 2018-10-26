@@ -25,3 +25,15 @@ func Test_Profile(t *testing.T) {
 		So(profile.Value()["sum"].(float64), ShouldEqual, 5)
 	})
 }
+
+func Benchmark_Profile(b *testing.B) {
+	script := `
+	var sum = get("sum", 0)
+	sum += message.value
+	set("sum", sum)
+`
+	profile := profiler.NewProfile(script, mhist.FilterDefinition{})
+	for i := 0; i < b.N; i++ {
+		profile.Eval(&mhist.Message{Value: 2})
+	}
+}
