@@ -1,10 +1,40 @@
-hash: 678c2a45f32c909f0087cbfb1b5ed17cd0c23ec85a07f2db59ec204c01d5aa9e
-updated: 2018-10-17T19:06:04.503817+02:00
+hash: 81c33d963188fc130c08a1da0a1c34744c3ae8b23bce0c7513a29a40c363b5f9
+updated: 2018-10-26T22:24:14.033622+02:00
 imports:
 - name: github.com/codeuniversity/ppp-mhist
-  version: 30218bbc30519c3637b50e9fe077d7e566194978
+  version: 6cb0ab70c12c122870c5f5cd6a185e0fc83a5237
   subpackages:
   - tcp
 - name: github.com/gorilla/websocket
   version: 66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d
-testImports: []
+- name: github.com/robertkrimen/otto
+  version: 15f95af6e78dcd2030d8195a138bd88d4f403546
+  subpackages:
+  - ast
+  - dbg
+  - file
+  - parser
+  - registry
+  - token
+- name: github.com/smartystreets/goconvey
+  version: 9e8dc3f972df6c8fcc0375ef492c24d0bb204857
+  subpackages:
+  - convey
+  - convey/gotest
+  - convey/reporting
+- name: gopkg.in/sourcemap.v1
+  version: 6e83acea0053641eff084973fee085f0c193c61a
+  subpackages:
+  - base64vlq
+testImports:
+- name: github.com/gopherjs/gopherjs
+  version: 444abdf920945de5d4a977b572bcc6c674d1e4eb
+  subpackages:
+  - js
+- name: github.com/jtolds/gls
+  version: 77f18212c9c7edc9bd6a33d383a7b545ce62f064
+- name: github.com/smartystreets/assertions
+  version: 0b37b35ec7434b77e77a4bb29b79677cced992ea
+  subpackages:
+  - internal/go-render/render
+  - internal/oglematchers

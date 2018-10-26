@@ -3,3 +3,8 @@ import:
 - package: github.com/codeuniversity/ppp-mhist
 - package: github.com/gorilla/websocket
   version: ^1.4.0
+- package: github.com/robertkrimen/otto
+- package: github.com/smartystreets/goconvey
+  version: ^1.6.3
+  subpackages:
+  - convey

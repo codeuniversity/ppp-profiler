@@ -46,7 +46,16 @@ func (s *Server) Listen() {
 //Run the server and listen for messages
 func (s *Server) Run() {
 	s.Connect()
-	average := &runningAverage{}
+	runningAverageScript := `
+		var average = get("average", 0)
+		var count = get("count", 0)
+		average = ((average * count) + message.value) / (count+1)
+		count++
+		set("average", average)
+		set("current", message.value)
+		set("count", count)
+	`
+	profile := NewProfile(runningAverageScript, mhist.FilterDefinition{})
 	for byteSlice := range s.incomingChannel {
 		message := &mhist.Message{}
 		err := json.Unmarshal(byteSlice, message)
@@ -54,11 +63,8 @@ func (s *Server) Run() {
 			fmt.Println(err)
 			continue
 		}
-		latestValue, ok := message.Value.(float64)
-		if ok {
-			average.Add(latestValue)
-			s.broadcast(data{Average: average.Value, Current: latestValue})
-		}
+		profile.Eval(message)
+		s.broadcast(profile.Value())
 	}
 }
 
@@ -70,12 +76,7 @@ func (s *Server) keepReading() {
 	}
 }
 
-type data struct {
-	Average float64 `json:"average"`
-	Current float64 `json:"current"`
-}
-
-func (s *Server) broadcast(d data) {
+func (s *Server) broadcast(d map[string]interface{}) {
 	s.RLock()
 	defer s.RUnlock()
 	for _, conn := range s.conns {
