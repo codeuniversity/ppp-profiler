@@ -151,6 +151,11 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 	s.conns = append(s.conns, conn)
+
+	s.forEachProfile(func(profile *Profile) {
+		d := profile.Value()
+		conn.WriteJSON(d)
+	})
 }
 
 type errorResponse struct {
