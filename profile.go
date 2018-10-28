@@ -10,19 +10,17 @@ import (
 
 //Profile is a scripted aggregation of data
 type Profile struct {
-	filter  mhist.FilterDefinition
-	script  string
-	store   map[string]interface{}
-	display map[string]interface{}
+	definition ProfileDefinition
+	store      map[string]interface{}
+	display    map[string]interface{}
 }
 
 //NewProfile with the provided aggregation script
-func NewProfile(script string, filterDefinition mhist.FilterDefinition) *Profile {
+func NewProfile(definition ProfileDefinition) *Profile {
 	return &Profile{
-		script:  script,
-		filter:  filterDefinition,
-		store:   make(map[string]interface{}),
-		display: make(map[string]interface{}),
+		definition: definition,
+		store:      make(map[string]interface{}),
+		display:    make(map[string]interface{}),
 	}
 }
 
@@ -33,12 +31,8 @@ func (p *Profile) Value() map[string]interface{} {
 
 //Eval message with script
 func (p *Profile) Eval(message *mhist.Message) {
-	if !p.filter.IsInNames(message.Name) {
-		return
-	}
-
 	vm := p.getJavascriptVMWithPresets(message)
-	_, err := vm.Run(p.script)
+	_, err := vm.Run(p.definition.EvalScript)
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -18,7 +18,7 @@ func Test_Profile(t *testing.T) {
 			set("sum", sum)
 			display("title", "the sum is " + sum)
 		`
-		profile := profiler.NewProfile(script, mhist.FilterDefinition{})
+		profile := profiler.NewProfile(profiler.ProfileDefinition{EvalScript: script})
 		profile.Eval(&mhist.Message{Value: 2})
 		So(profile.Value(), ShouldContainKey, "title")
 		So(profile.Value()["title"].(string), ShouldEqual, "the sum is 2")
@@ -33,7 +33,7 @@ func Benchmark_Profile(b *testing.B) {
 	sum += message.value
 	set("sum", sum)
 `
-	profile := profiler.NewProfile(script, mhist.FilterDefinition{})
+	profile := profiler.NewProfile(profiler.ProfileDefinition{EvalScript: script})
 	for i := 0; i < b.N; i++ {
 		profile.Eval(&mhist.Message{Value: 2})
 	}
