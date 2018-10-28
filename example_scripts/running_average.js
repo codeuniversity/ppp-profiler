@@ -6,5 +6,6 @@ set("average", average)
 set("current", message.value)
 set("count", count)
 
-display("average", average)
-display("current", message.value)
+var title = "The lifetime average of the CPU temperature is "+ average.toFixed(2) +"C"
+display("title", title)
+display("description", "Its current temperature is "+message.value.toFixed(2) + "C")
