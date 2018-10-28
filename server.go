@@ -3,6 +3,7 @@ package profiler
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"sync"
@@ -54,8 +55,11 @@ func (s *Server) Run() {
 		set("average", average)
 		set("current", message.value)
 		set("count", count)
+
+		display("average", average)
+		display("current", message.value)
 	`
-	profile := NewProfile(runningAverageScript, mhist.FilterDefinition{})
+	profile := NewProfile(ProfileDefinition{EvalScript: runningAverageScript})
 	for byteSlice := range s.incomingChannel {
 		message := &mhist.Message{}
 		err := json.Unmarshal(byteSlice, message)
@@ -79,10 +83,18 @@ func (s *Server) keepReading() {
 func (s *Server) broadcast(d map[string]interface{}) {
 	s.RLock()
 	defer s.RUnlock()
-	for _, conn := range s.conns {
+	for index, conn := range s.conns {
 		err := conn.WriteJSON(d)
 		if err != nil {
+			//assume connection is dead
 			fmt.Println(err)
+			newSlice := make([]*websocket.Conn, 0)
+			newSlice = append(newSlice, s.conns[:index]...)
+			if index+1 < len(s.conns) {
+				newSlice = append(newSlice, s.conns[index+1:]...)
+			}
+
+			s.conns = newSlice
 		}
 	}
 }
