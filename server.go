@@ -85,7 +85,7 @@ func (s *Server) forEachProfile(f func(p *Profile)) {
 	}
 }
 
-func (s *Server) broadcast(d map[string]interface{}) {
+func (s *Server) broadcast(d ProfileDisplayValue) {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 	indicesToRemove := []int{}

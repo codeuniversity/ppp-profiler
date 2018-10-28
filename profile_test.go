@@ -20,10 +20,10 @@ func Test_Profile(t *testing.T) {
 		`
 		profile := profiler.NewProfile(profiler.ProfileDefinition{EvalScript: script})
 		profile.Eval(&mhist.Message{Value: 2})
-		So(profile.Value(), ShouldContainKey, "title")
-		So(profile.Value()["title"].(string), ShouldEqual, "the sum is 2")
+		So(profile.Value().Data, ShouldContainKey, "title")
+		So(profile.Value().Data["title"].(string), ShouldEqual, "the sum is 2")
 		profile.Eval(&mhist.Message{Value: 3})
-		So(profile.Value()["title"].(string), ShouldEqual, "the sum is 5")
+		So(profile.Value().Data["title"].(string), ShouldEqual, "the sum is 5")
 	})
 }
 

@@ -24,11 +24,17 @@ func NewProfile(definition ProfileDefinition) *Profile {
 	}
 }
 
+//ProfileDisplayValue is filled by javascript
+type ProfileDisplayValue struct {
+	ID   string                 `json:"id"`
+	Data map[string]interface{} `json:"data"`
+}
+
 //Value is the current display state of the profile. Completely generated in javascript
-func (p *Profile) Value() map[string]interface{} {
-	return map[string]interface{}{
-		"id":   p.definition.ID,
-		"data": p.display,
+func (p *Profile) Value() ProfileDisplayValue {
+	return ProfileDisplayValue{
+		ID:   p.definition.ID,
+		Data: p.display,
 	}
 }
 
