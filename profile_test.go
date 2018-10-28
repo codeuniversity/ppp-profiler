@@ -16,13 +16,14 @@ func Test_Profile(t *testing.T) {
 			var sum = get("sum", 0)
 			sum += message.value
 			set("sum", sum)
+			display("title", "the sum is " + sum)
 		`
 		profile := profiler.NewProfile(script, mhist.FilterDefinition{})
 		profile.Eval(&mhist.Message{Value: 2})
-		So(profile.Value(), ShouldContainKey, "sum")
-		So(profile.Value()["sum"].(float64), ShouldEqual, 2)
+		So(profile.Value(), ShouldContainKey, "title")
+		So(profile.Value()["title"].(string), ShouldEqual, "the sum is 2")
 		profile.Eval(&mhist.Message{Value: 3})
-		So(profile.Value()["sum"].(float64), ShouldEqual, 5)
+		So(profile.Value()["title"].(string), ShouldEqual, "the sum is 5")
 	})
 }
 
