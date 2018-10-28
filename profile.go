@@ -8,14 +8,14 @@ import (
 	"github.com/robertkrimen/otto"
 )
 
-//Profile is a scripted aggregation of data
+//Profile is user-scripted aggregation of data
 type Profile struct {
 	definition ProfileDefinition
 	store      map[string]interface{}
 	display    map[string]interface{}
 }
 
-//NewProfile with the provided aggregation script
+//NewProfile with the provided definition, including a script
 func NewProfile(definition ProfileDefinition) *Profile {
 	return &Profile{
 		definition: definition,
@@ -24,7 +24,7 @@ func NewProfile(definition ProfileDefinition) *Profile {
 	}
 }
 
-//Value is the current state of the profile. Completely generated in javascript
+//Value is the current display state of the profile. Completely generated in javascript
 func (p *Profile) Value() map[string]interface{} {
 	return map[string]interface{}{
 		"id":   p.definition.ID,
