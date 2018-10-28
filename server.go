@@ -10,6 +10,7 @@ import (
 
 	"github.com/codeuniversity/ppp-mhist"
 	"github.com/gorilla/websocket"
+	uuid "github.com/satori/go.uuid"
 )
 
 //Server that listens for new events and serves profiles
@@ -18,7 +19,9 @@ type Server struct {
 	incomingChannel chan []byte
 	subscriber      *mhist.TCPSubscriber
 	conns           []*websocket.Conn
-	sync.RWMutex
+	profiles        []*Profile
+	connLock        *sync.RWMutex
+	profileLock     *sync.RWMutex
 }
 
 //NewServer returns a server ready for usage
@@ -28,6 +31,8 @@ func NewServer(address string) *Server {
 		Address:         address,
 		incomingChannel: incomingChannel,
 		subscriber:      mhist.NewTCPSubscriber(address, mhist.FilterDefinition{}, incomingChannel),
+		connLock:        &sync.RWMutex{},
+		profileLock:     &sync.RWMutex{},
 	}
 }
 
@@ -40,6 +45,7 @@ func (s *Server) Connect() {
 
 //Listen to incoming http requests to be upgraded to websocket connections
 func (s *Server) Listen() {
+	http.HandleFunc("/profiles", s.profileHandler)
 	http.HandleFunc("/", s.websocketHandler)
 	http.ListenAndServe(":4000", nil)
 }
@@ -47,19 +53,7 @@ func (s *Server) Listen() {
 //Run the server and listen for messages
 func (s *Server) Run() {
 	s.Connect()
-	runningAverageScript := `
-		var average = get("average", 0)
-		var count = get("count", 0)
-		average = ((average * count) + message.value) / (count+1)
-		count++
-		set("average", average)
-		set("current", message.value)
-		set("count", count)
 
-		display("average", average)
-		display("current", message.value)
-	`
-	profile := NewProfile(ProfileDefinition{EvalScript: runningAverageScript})
 	for byteSlice := range s.incomingChannel {
 		message := &mhist.Message{}
 		err := json.Unmarshal(byteSlice, message)
@@ -67,8 +61,10 @@ func (s *Server) Run() {
 			fmt.Println(err)
 			continue
 		}
-		profile.Eval(message)
-		s.broadcast(profile.Value())
+		s.forEachProfile(func(profile *Profile) {
+			profile.Eval(message)
+			s.broadcast(profile.Value())
+		})
 	}
 }
 
@@ -80,9 +76,18 @@ func (s *Server) keepReading() {
 	}
 }
 
+func (s *Server) forEachProfile(f func(p *Profile)) {
+	s.profileLock.RLock()
+	defer s.profileLock.RUnlock()
+
+	for _, profile := range s.profiles {
+		f(profile)
+	}
+}
+
 func (s *Server) broadcast(d map[string]interface{}) {
-	s.RLock()
-	defer s.RUnlock()
+	s.connLock.RLock()
+	defer s.connLock.RUnlock()
 	for index, conn := range s.conns {
 		err := conn.WriteJSON(d)
 		if err != nil {
@@ -107,6 +112,35 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
+	byteSlice, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	definition := &ProfileDefinition{}
+	err = json.Unmarshal(byteSlice, definition)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+	id := uuid.NewV4()
+	definition.ID = id.String()
+	profile := NewProfile(*definition)
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+
+	s.profiles = append(s.profiles, profile)
+
+	answer, err := json.Marshal(definition)
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+	w.Write(answer)
+}
+
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -114,7 +148,21 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	s.connLock.Lock()
+	defer s.connLock.Unlock()
 	s.conns = append(s.conns, conn)
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func renderError(err error, w http.ResponseWriter, status int) {
+	fmt.Println(err)
+	resp := &errorResponse{Error: err.Error()}
+	data, err := json.Marshal(resp)
+	if err == nil {
+		w.WriteHeader(status)
+		w.Write(data)
+	}
 }

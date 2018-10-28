@@ -26,7 +26,10 @@ func NewProfile(definition ProfileDefinition) *Profile {
 
 //Value is the current state of the profile. Completely generated in javascript
 func (p *Profile) Value() map[string]interface{} {
-	return p.display
+	return map[string]interface{}{
+		"id":   p.definition.ID,
+		"data": p.display,
+	}
 }
 
 //Eval message with script
