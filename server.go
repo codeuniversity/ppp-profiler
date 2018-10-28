@@ -86,22 +86,30 @@ func (s *Server) forEachProfile(f func(p *Profile)) {
 }
 
 func (s *Server) broadcast(d map[string]interface{}) {
-	s.connLock.RLock()
-	defer s.connLock.RUnlock()
+	s.connLock.Lock()
+	defer s.connLock.Unlock()
+	indicesToRemove := []int{}
+
 	for index, conn := range s.conns {
 		err := conn.WriteJSON(d)
 		if err != nil {
 			//assume connection is dead
 			fmt.Println(err)
-			newSlice := make([]*websocket.Conn, 0)
-			newSlice = append(newSlice, s.conns[:index]...)
-			if index+1 < len(s.conns) {
-				newSlice = append(newSlice, s.conns[index+1:]...)
-			}
-
-			s.conns = newSlice
+			indicesToRemove = append(indicesToRemove, index)
 		}
 	}
+
+	if len(indicesToRemove) == 0 {
+		return
+	}
+
+	newSlice := []*websocket.Conn{}
+	for index, conn := range s.conns {
+		if !isIncluded(index, indicesToRemove) {
+			newSlice = append(newSlice, conn)
+		}
+	}
+	s.conns = newSlice
 }
 
 var upgrader = websocket.Upgrader{
@@ -170,4 +178,13 @@ func renderError(err error, w http.ResponseWriter, status int) {
 		w.WriteHeader(status)
 		w.Write(data)
 	}
+}
+
+func isIncluded(element int, arr []int) bool {
+	for _, arrayElement := range arr {
+		if arrayElement == element {
+			return true
+		}
+	}
+	return false
 }
