@@ -1,10 +1,14 @@
-hash: 33f0ad58722a75492cf9927eaa6418327af3676d5aa10eb3f9807f147224fdd1
-updated: 2018-10-28T20:01:34.147928+01:00
+hash: f85db2429798be2d6aebf0aca8f5396dba5f35b39b314afc3aa9056ea584e7fb
+updated: 2018-11-01T20:29:32.732714+01:00
 imports:
 - name: github.com/codeuniversity/ppp-mhist
   version: 30218bbc30519c3637b50e9fe077d7e566194978
   subpackages:
   - tcp
+- name: github.com/etcd-io/bbolt
+  version: 7ee3ded59d4835e10f3e7d0f7603c42aa5e83820
+- name: github.com/gorilla/mux
+  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/gorilla/websocket
   version: 66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d
 - name: github.com/robertkrimen/otto
@@ -16,14 +20,16 @@ imports:
   - parser
   - registry
   - token
-- name: github.com/satori/go.uuid
-  version: f58768cc1a7a7e77a3bd49e98cdd21419399b6a3
 - name: github.com/smartystreets/goconvey
   version: 9e8dc3f972df6c8fcc0375ef492c24d0bb204857
   subpackages:
   - convey
   - convey/gotest
   - convey/reporting
+- name: golang.org/x/sys
+  version: f6cff0780e542efa0c8e864dc8fa522808f6a598
+  subpackages:
+  - unix
 - name: gopkg.in/sourcemap.v1
   version: 6e83acea0053641eff084973fee085f0c193c61a
   subpackages:

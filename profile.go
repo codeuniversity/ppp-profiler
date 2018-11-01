@@ -10,38 +10,38 @@ import (
 
 //Profile is user-scripted aggregation of data
 type Profile struct {
-	definition ProfileDefinition
-	store      map[string]interface{}
-	display    map[string]interface{}
+	Definition ProfileDefinition      `json:"definition"`
+	Store      map[string]interface{} `json:"store"`
+	Display    map[string]interface{} `json:"display"`
 }
 
 //NewProfile with the provided definition, including a script
 func NewProfile(definition ProfileDefinition) *Profile {
 	return &Profile{
-		definition: definition,
-		store:      make(map[string]interface{}),
-		display:    make(map[string]interface{}),
+		Definition: definition,
+		Store:      make(map[string]interface{}),
+		Display:    make(map[string]interface{}),
 	}
 }
 
 //ProfileDisplayValue is filled by javascript
 type ProfileDisplayValue struct {
-	ID   string                 `json:"id"`
+	ID   int                    `json:"id"`
 	Data map[string]interface{} `json:"data"`
 }
 
 //Value is the current display state of the profile. Completely generated in javascript
 func (p *Profile) Value() ProfileDisplayValue {
 	return ProfileDisplayValue{
-		ID:   p.definition.ID,
-		Data: p.display,
+		ID:   p.Definition.ID,
+		Data: p.Display,
 	}
 }
 
 //Eval message with script
 func (p *Profile) Eval(message *mhist.Message) {
 	vm := p.getJavascriptVMWithPresets(message)
-	_, err := vm.Run(p.definition.EvalScript)
+	_, err := vm.Run(p.Definition.EvalScript)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -73,7 +73,7 @@ func (p *Profile) putValueInDisplay(call otto.FunctionCall) otto.Value {
 	value, _ := call.Argument(1).Export()
 
 	if key != "" && value != nil {
-		p.display[key] = value
+		p.Display[key] = value
 	}
 
 	return otto.Value{}
@@ -84,7 +84,7 @@ func (p *Profile) putValueInStore(call otto.FunctionCall) otto.Value {
 	value, _ := call.Argument(1).Export()
 
 	if key != "" && value != nil {
-		p.store[key] = value
+		p.Store[key] = value
 	}
 
 	return otto.Value{}
@@ -98,7 +98,7 @@ func (p *Profile) getValueFromStore(call otto.FunctionCall) otto.Value {
 		return otto.Value{}
 	}
 
-	storedValue := p.store[key]
+	storedValue := p.Store[key]
 	if storedValue == nil && defaultValue.IsDefined() {
 		return defaultValue
 	}
