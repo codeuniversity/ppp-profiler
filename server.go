@@ -87,6 +87,7 @@ func (s *Server) Connect() {
 //Listen to incoming http requests to be upgraded to websocket connections
 func (s *Server) Listen() {
 	r := mux.NewRouter()
+	r.HandleFunc("/profiles/{id}", s.profileHandler)
 	r.HandleFunc("/profiles", s.profileHandler)
 	r.HandleFunc("/", s.websocketHandler)
 	http.Handle("/", r)
@@ -217,6 +218,8 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 		s.handleProfilesPost(w, r)
 	case http.MethodGet:
 		s.handleProfilesGet(w, r)
+	case http.MethodDelete:
+		s.handleProfileDelete(w, r)
 	}
 }
 
@@ -276,6 +279,45 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(answer)
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	idPart := mux.Vars(r)["id"]
+	if idPart == "" {
+		err := errors.New("you have to specify a profile id to delete")
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	parsedID, err := strconv.ParseInt(idPart, 10, 64)
+	idToBeDeleted := int(parsedID)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+
+	newProfileSlice := []*Profile{}
+
+	for _, profile := range s.profiles {
+		if profile.Definition.ID != idToBeDeleted {
+			newProfileSlice = append(newProfileSlice, profile)
+		}
+	}
+	s.profiles = newProfileSlice
+
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		return bucket.Delete(itob(idToBeDeleted))
+	})
+
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
