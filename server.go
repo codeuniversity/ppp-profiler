@@ -1,17 +1,28 @@
 package profiler
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/codeuniversity/ppp-mhist"
+	bolt "github.com/etcd-io/bbolt"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	uuid "github.com/satori/go.uuid"
 )
+
+var dbPath = "data"
+
+var profileBucketName = []byte("profiles")
 
 //Server that listens for new events and serves profiles
 type Server struct {
@@ -22,18 +33,48 @@ type Server struct {
 	profiles        []*Profile
 	connLock        *sync.RWMutex
 	profileLock     *sync.RWMutex
+	db              *bolt.DB
 }
 
 //NewServer returns a server ready for usage
 func NewServer(address string) *Server {
 	incomingChannel := make(chan []byte)
-	return &Server{
+
+	os.MkdirAll(dbPath, os.ModePerm)
+
+	db, err := bolt.Open(filepath.Join(dbPath, "profile.db"), os.ModePerm, nil)
+	if err != nil {
+		fmt.Println("failed to open db")
+		panic(err)
+	}
+	tx, err := db.Begin(true)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = tx.CreateBucketIfNotExists(profileBucketName)
+
+	if err != nil {
+		panic(err)
+	}
+	err = tx.Commit()
+
+	if err != nil {
+		panic(err)
+	}
+
+	s := &Server{
 		Address:         address,
 		incomingChannel: incomingChannel,
 		subscriber:      mhist.NewTCPSubscriber(address, mhist.FilterDefinition{}, incomingChannel),
 		connLock:        &sync.RWMutex{},
 		profileLock:     &sync.RWMutex{},
+		db:              db,
 	}
+
+	s.readProfilesIntoMemory()
+	go s.keepUpdatingDB()
+	return s
 }
 
 //Connect to server and retry to establish connections
@@ -45,8 +86,11 @@ func (s *Server) Connect() {
 
 //Listen to incoming http requests to be upgraded to websocket connections
 func (s *Server) Listen() {
-	http.HandleFunc("/profiles", s.profileHandler)
-	http.HandleFunc("/", s.websocketHandler)
+	r := mux.NewRouter()
+	r.HandleFunc("/profiles/{id}", s.profileHandler)
+	r.HandleFunc("/profiles", s.profileHandler)
+	r.HandleFunc("/", s.websocketHandler)
+	http.Handle("/", r)
 	http.ListenAndServe(":4000", nil)
 }
 
@@ -66,6 +110,54 @@ func (s *Server) Run() {
 			s.broadcast(profile.Value())
 		})
 	}
+}
+
+func (s *Server) keepUpdatingDB() {
+	ticker := time.NewTicker(5 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			s.updateProfilesOnDisk()
+		}
+
+	}
+}
+
+func (s *Server) readProfilesIntoMemory() {
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+	s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		bucket.ForEach(func(_, value []byte) error {
+			profile := &Profile{}
+			err := json.Unmarshal(value, profile)
+			if err != nil {
+				return nil
+			}
+			s.profiles = append(s.profiles, profile)
+			return nil
+		})
+		return nil
+	})
+}
+
+func (s *Server) updateProfilesOnDisk() {
+	s.profileLock.RLock()
+	defer s.profileLock.RUnlock()
+
+	s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		for _, profile := range s.profiles {
+			byteSlice, err := json.Marshal(profile)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			bucket.Put(itob(profile.Definition.ID), byteSlice)
+
+		}
+		return nil
+	})
 }
 
 func (s *Server) keepReading() {
@@ -121,6 +213,30 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		s.handleProfilesPost(w, r)
+	case http.MethodGet:
+		s.handleProfilesGet(w, r)
+	case http.MethodDelete:
+		s.handleProfileDelete(w, r)
+	}
+}
+
+func (s *Server) handleProfilesGet(w http.ResponseWriter, r *http.Request) {
+	s.profileLock.RLock()
+	defer s.profileLock.RUnlock()
+
+	byteSlice, err := json.Marshal(s.profiles)
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(byteSlice)
+}
+
+func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 	byteSlice, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		renderError(err, w, http.StatusBadRequest)
@@ -133,12 +249,28 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 		renderError(err, w, http.StatusBadRequest)
 		return
 	}
-	id := uuid.NewV4()
-	definition.ID = id.String()
-	profile := NewProfile(*definition)
+
+	var profile *Profile
 	s.profileLock.Lock()
 	defer s.profileLock.Unlock()
 
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		id, _ := bucket.NextSequence()
+		definition.ID = int(id)
+		profile = NewProfile(*definition)
+		byteSlice, err := json.Marshal(profile)
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put(itob(definition.ID), byteSlice)
+	})
+
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
 	s.profiles = append(s.profiles, profile)
 
 	answer, err := json.Marshal(definition)
@@ -147,6 +279,45 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(answer)
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	idPart := mux.Vars(r)["id"]
+	if idPart == "" {
+		err := errors.New("you have to specify a profile id to delete")
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	parsedID, err := strconv.ParseInt(idPart, 10, 64)
+	idToBeDeleted := int(parsedID)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+
+	newProfileSlice := []*Profile{}
+
+	for _, profile := range s.profiles {
+		if profile.Definition.ID != idToBeDeleted {
+			newProfileSlice = append(newProfileSlice, profile)
+		}
+	}
+	s.profiles = newProfileSlice
+
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		return bucket.Delete(itob(idToBeDeleted))
+	})
+
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
@@ -187,4 +358,11 @@ func isIncluded(element int, arr []int) bool {
 		}
 	}
 	return false
+}
+
+// itob returns an 8-byte big endian representation of v.
+func itob(v int) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
 }
