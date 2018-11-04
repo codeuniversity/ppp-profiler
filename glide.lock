@@ -2,7 +2,7 @@ hash: f85db2429798be2d6aebf0aca8f5396dba5f35b39b314afc3aa9056ea584e7fb
 updated: 2018-11-01T20:29:32.732714+01:00
 imports:
 - name: github.com/codeuniversity/ppp-mhist
-  version: 30218bbc30519c3637b50e9fe077d7e566194978
+  version: 8ea74398c9c4afcee0f2eb87bdad9435a2309980
   subpackages:
   - tcp
 - name: github.com/etcd-io/bbolt
