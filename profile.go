@@ -40,6 +40,8 @@ func (p *Profile) Value() ProfileDisplayValue {
 
 //Eval message with script
 func (p *Profile) Eval(message *mhist.Message) {
+	p.Display = map[string]interface{}{}
+
 	vm := p.getJavascriptVMWithPresets(message)
 	_, err := vm.Run(p.Definition.EvalScript)
 	if err != nil {
