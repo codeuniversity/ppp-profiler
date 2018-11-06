@@ -6,6 +6,10 @@ set("average", average)
 set("current", message.value)
 set("count", count)
 
-var title = "The lifetime average of the CPU temperature is "+ average.toFixed(2) +"C"
-display("title", title)
-display("description", "Its current temperature is "+message.value.toFixed(2) + "C")
+var t = "The lifetime average of the CPU temperature is "+ average.toFixed(2) +"C"
+title(t)
+description("Its current temperature is "+message.value.toFixed(2) + "C")
+
+if (message.value > 60) {
+  action("You should cool it down")
+}
