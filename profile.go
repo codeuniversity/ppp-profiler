@@ -26,7 +26,7 @@ func NewProfile(definition ProfileDefinition) *Profile {
 
 //ProfileDisplayValue is filled by javascript
 type ProfileDisplayValue struct {
-	ID   int                    `json:"id"`
+	ID   string                 `json:"id"`
 	Data map[string]interface{} `json:"data"`
 }
 
