@@ -40,6 +40,8 @@ func (p *Profile) Value() ProfileDisplayValue {
 
 //Eval message with script
 func (p *Profile) Eval(message *mhist.Message) {
+	p.Display = map[string]interface{}{}
+
 	vm := p.getJavascriptVMWithPresets(message)
 	_, err := vm.Run(p.Definition.EvalScript)
 	if err != nil {
@@ -51,7 +53,9 @@ func (p *Profile) getJavascriptVMWithPresets(message *mhist.Message) *otto.Otto 
 	vm := otto.New()
 	vm.Set("set", p.putValueInStore)
 	vm.Set("get", p.getValueFromStore)
-	vm.Set("display", p.putValueInDisplay)
+	vm.Set("title", p.displaySetterForKey("title"))
+	vm.Set("description", p.displaySetterForKey("description"))
+	vm.Set("action", p.displaySetterForKey("action"))
 
 	messageObject, _ := vm.Object("abc = {}")
 	if message.Name != "" {
@@ -68,15 +72,16 @@ func (p *Profile) getJavascriptVMWithPresets(message *mhist.Message) *otto.Otto 
 	return vm
 }
 
-func (p *Profile) putValueInDisplay(call otto.FunctionCall) otto.Value {
-	key := call.Argument(0).String()
-	value, _ := call.Argument(1).Export()
+func (p *Profile) displaySetterForKey(displayKey string) func(call otto.FunctionCall) otto.Value {
+	return func(call otto.FunctionCall) otto.Value {
+		value, _ := call.Argument(0).Export()
 
-	if key != "" && value != nil {
-		p.Display[key] = value
+		if value != nil {
+			p.Display[displayKey] = value
+		}
+
+		return otto.Value{}
 	}
-
-	return otto.Value{}
 }
 
 func (p *Profile) putValueInStore(call otto.FunctionCall) otto.Value {
