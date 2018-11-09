@@ -18,6 +18,7 @@ import (
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/rs/cors"
 )
 
 var dbPath = "data"
@@ -91,7 +92,12 @@ func (s *Server) Listen() {
 	r.HandleFunc("/profiles", s.profileHandler)
 	r.HandleFunc("/", s.websocketHandler)
 	http.Handle("/", r)
-	http.ListenAndServe(":4000", nil)
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "DELETE"},
+	})
+
+	http.ListenAndServe(":4000", c.Handler(r))
 }
 
 //Run the server and listen for messages
@@ -358,7 +364,6 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 				State: value.Data,
 			},
 		}
-		fmt.Println(value)
 		conn.WriteJSON(message)
 	})
 }
