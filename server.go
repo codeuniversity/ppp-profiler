@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -274,14 +273,16 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if definition.ID == "" {
+		renderError(errors.New("id has to be set"), w, http.StatusBadRequest)
+	}
+
 	var profile *Profile
 	s.profileLock.Lock()
 	defer s.profileLock.Unlock()
 
 	err = s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(profileBucketName)
-		id, _ := bucket.NextSequence()
-		definition.ID = strconv.FormatInt(int64(id), 10)
 		profile = NewProfile(*definition)
 		byteSlice, err := json.Marshal(profile)
 		if err != nil {
