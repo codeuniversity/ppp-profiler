@@ -46,6 +46,7 @@ func (p *Profile) Eval(message *mhist.Message) {
 	_, err := vm.Run(p.Definition.EvalScript)
 	if err != nil {
 		fmt.Println(err)
+		p.Display["error"] = err.Error()
 	}
 }
 
