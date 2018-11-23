@@ -86,7 +86,7 @@ func (s *Server) Connect() {
 	go s.Listen()
 }
 
-//Listen to incoming http requests to be upgraded to websocket connections
+//Listen to incoming http requests
 func (s *Server) Listen() {
 	r := mux.NewRouter()
 	r.HandleFunc("/profiles/{id}", s.profileHandler)
