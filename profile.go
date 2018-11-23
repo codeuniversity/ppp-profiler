@@ -1,8 +1,6 @@
 package profiler
 
 import (
-	"fmt"
-
 	"github.com/codeuniversity/ppp-mhist"
 
 	"github.com/robertkrimen/otto"
@@ -45,9 +43,9 @@ func (p *Profile) Eval(message *mhist.Message) {
 	vm := p.getJavascriptVMWithPresets(message)
 	_, err := vm.Run(p.Definition.EvalScript)
 	if err != nil {
-		fmt.Println(err)
 		p.Display["error"] = err.Error()
 	}
+	p.Display["script"] = p.Definition.EvalScript
 }
 
 func (p *Profile) getJavascriptVMWithPresets(message *mhist.Message) *otto.Otto {
