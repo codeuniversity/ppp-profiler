@@ -26,18 +26,19 @@ var profileBucketName = []byte("profiles")
 
 //Server that listens for new events and serves profiles
 type Server struct {
-	Address         string
-	incomingChannel chan []byte
-	subscriber      *mhist.TCPSubscriber
-	conns           []*websocket.Conn
-	profiles        []*Profile
-	connLock        *sync.RWMutex
-	profileLock     *sync.RWMutex
-	db              *bolt.DB
+	MhistHTTPAddress string
+	MhistTCPAddress  string
+	incomingChannel  chan []byte
+	subscriber       *mhist.TCPSubscriber
+	conns            []*websocket.Conn
+	profiles         []*Profile
+	connLock         *sync.RWMutex
+	profileLock      *sync.RWMutex
+	db               *bolt.DB
 }
 
 //NewServer returns a server ready for usage
-func NewServer(address string) *Server {
+func NewServer(httpAddress string, tcpAddress string) *Server {
 	incomingChannel := make(chan []byte)
 
 	os.MkdirAll(dbPath, os.ModePerm)
@@ -64,12 +65,13 @@ func NewServer(address string) *Server {
 	}
 
 	s := &Server{
-		Address:         address,
-		incomingChannel: incomingChannel,
-		subscriber:      mhist.NewTCPSubscriber(address, mhist.FilterDefinition{}, incomingChannel),
-		connLock:        &sync.RWMutex{},
-		profileLock:     &sync.RWMutex{},
-		db:              db,
+		MhistHTTPAddress: httpAddress,
+		MhistTCPAddress:  tcpAddress,
+		incomingChannel:  incomingChannel,
+		subscriber:       mhist.NewTCPSubscriber(tcpAddress, mhist.FilterDefinition{}, incomingChannel),
+		connLock:         &sync.RWMutex{},
+		profileLock:      &sync.RWMutex{},
+		db:               db,
 	}
 
 	s.readProfilesIntoMemory()
@@ -89,6 +91,7 @@ func (s *Server) Listen() {
 	r := mux.NewRouter()
 	r.HandleFunc("/profiles/{id}", s.profileHandler)
 	r.HandleFunc("/profiles", s.profileHandler)
+	r.HandleFunc("/meta", s.metaHandler)
 	r.HandleFunc("/", s.websocketHandler)
 	http.Handle("/", r)
 	c := cors.New(cors.Options{
@@ -244,6 +247,22 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		s.handleProfileDelete(w, r)
 	}
+}
+
+func (s *Server) metaHandler(w http.ResponseWriter, r *http.Request) {
+	resp, err := http.Get(fmt.Sprintf("%v/meta", s.MhistHTTPAddress))
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(body)
 }
 
 func (s *Server) handleProfilesGet(w http.ResponseWriter, r *http.Request) {
