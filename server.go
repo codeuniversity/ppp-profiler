@@ -304,6 +304,16 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(answer)
+
+	value := profile.Value()
+	message := profileMessage{
+		ID: value.ID,
+		Data: profileMessageContent{
+			Type:  "update",
+			State: value.Data,
+		},
+	}
+	s.broadcast(message)
 }
 
 func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
