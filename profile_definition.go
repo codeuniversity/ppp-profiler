@@ -1,8 +1,13 @@
 package profiler
 
+import (
+	"github.com/codeuniversity/ppp-mhist"
+)
+
 //ProfileDefinition is the information that is sent to the server to define a profile
 type ProfileDefinition struct {
-	ID         string `json:"id"`
-	EvalScript string `json:"eval_script"`
-	IsLocal    bool   `json:"is_local"`
+	ID         string                 `json:"id"`
+	EvalScript string                 `json:"eval_script"`
+	IsLocal    bool                   `json:"is_local"`
+	Filter     mhist.FilterDefinition `json:"filter"`
 }

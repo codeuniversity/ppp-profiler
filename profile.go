@@ -47,6 +47,9 @@ func (p *Profile) Value() ProfileDisplayValue {
 
 //Eval message with script
 func (p *Profile) Eval(message *mhist.Message) {
+	if !p.Definition.Filter.IsInNames(message.Name) {
+		return
+	}
 	p.Display = map[string]interface{}{}
 
 	vm := p.getJavascriptVMWithPresets(message)
