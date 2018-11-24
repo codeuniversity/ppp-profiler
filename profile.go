@@ -22,17 +22,26 @@ func NewProfile(definition ProfileDefinition) *Profile {
 	}
 }
 
+//ProfileData ...
+type ProfileData struct {
+	Definition ProfileDefinition      `json:"definition"`
+	Display    map[string]interface{} `json:"display"`
+}
+
 //ProfileDisplayValue is filled by javascript
 type ProfileDisplayValue struct {
-	ID   string                 `json:"id"`
-	Data map[string]interface{} `json:"data"`
+	ID   string      `json:"id"`
+	Data ProfileData `json:"data"`
 }
 
 //Value is the current display state of the profile. Completely generated in javascript
 func (p *Profile) Value() ProfileDisplayValue {
 	return ProfileDisplayValue{
-		ID:   p.Definition.ID,
-		Data: p.Display,
+		ID: p.Definition.ID,
+		Data: ProfileData{
+			Definition: p.Definition,
+			Display:    p.Display,
+		},
 	}
 }
 
@@ -45,7 +54,6 @@ func (p *Profile) Eval(message *mhist.Message) {
 	if err != nil {
 		p.Display["error"] = err.Error()
 	}
-	p.Display["script"] = p.Definition.EvalScript
 }
 
 func (p *Profile) getJavascriptVMWithPresets(message *mhist.Message) *otto.Otto {

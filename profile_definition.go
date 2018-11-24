@@ -4,4 +4,5 @@ package profiler
 type ProfileDefinition struct {
 	ID         string `json:"id"`
 	EvalScript string `json:"eval_script"`
+	IsLocal    bool   `json:"is_local"`
 }

@@ -120,7 +120,7 @@ func (s *Server) Run() {
 				ID: value.ID,
 				Data: profileMessageContent{
 					Type:  "update",
-					State: value.Data,
+					State: &value.Data,
 				},
 			}
 			s.broadcast(message)
@@ -199,8 +199,8 @@ type profileMessage struct {
 }
 
 type profileMessageContent struct {
-	Type  string                 `json:"type"`
-	State map[string]interface{} `json:"state"`
+	Type  string       `json:"type"`
+	State *ProfileData `json:"state,omitempty"`
 }
 
 func (s *Server) broadcast(m profileMessage) {
@@ -329,7 +329,7 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		ID: value.ID,
 		Data: profileMessageContent{
 			Type:  "update",
-			State: value.Data,
+			State: &value.Data,
 		},
 	}
 	s.broadcast(message)
@@ -391,7 +391,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 			ID: value.ID,
 			Data: profileMessageContent{
 				Type:  "update",
-				State: value.Data,
+				State: &value.Data,
 			},
 		}
 		conn.WriteJSON(message)
