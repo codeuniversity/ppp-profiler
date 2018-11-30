@@ -96,7 +96,7 @@ func (s *Server) Listen() {
 	http.Handle("/", r)
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "DELETE"},
+		AllowedMethods: []string{"GET", "POST", "DELETE", "PUT"},
 	})
 
 	http.ListenAndServe(":4000", c.Handler(r))
@@ -246,6 +246,8 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 		s.handleProfilesGet(w, r)
 	case http.MethodDelete:
 		s.handleProfileDelete(w, r)
+	case http.MethodPut:
+		s.handleProfileUpdate(w, r)
 	}
 }
 
@@ -333,6 +335,79 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	s.broadcast(message)
+}
+
+func (s *Server) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	idToBeUpdated := mux.Vars(r)["id"]
+	if idToBeUpdated == "" {
+		err := errors.New("you have to specify a profile id to update")
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	byteSlice, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	definitionUpdate := &ProfileDefinitionUpdate{}
+	err = json.Unmarshal(byteSlice, definitionUpdate)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+
+	var inMemoryProfile *Profile
+	for _, profile := range s.profiles {
+		if profile.Definition.ID == idToBeUpdated {
+			inMemoryProfile = profile
+		}
+	}
+
+	if definitionUpdate.EvalScript != nil {
+		inMemoryProfile.Definition.EvalScript = *definitionUpdate.EvalScript
+	}
+
+	if definitionUpdate.Filter != nil {
+		inMemoryProfile.Definition.Filter = *definitionUpdate.Filter
+	}
+
+	if definitionUpdate.IsLocal != nil {
+		inMemoryProfile.Definition.IsLocal = *definitionUpdate.IsLocal
+	}
+
+	if definitionUpdate.LibraryID != nil {
+		inMemoryProfile.Definition.LibraryID = *definitionUpdate.LibraryID
+	}
+
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		byteSlice, err := json.Marshal(inMemoryProfile)
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put([]byte(inMemoryProfile.Definition.ID), byteSlice)
+	})
+
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+	value := inMemoryProfile.Value()
+	message := profileMessage{
+		ID: value.ID,
+		Data: profileMessageContent{
+			Type:  "update",
+			State: &value.Data,
+		},
+	}
+	s.broadcast(message)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
