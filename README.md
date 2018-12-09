@@ -10,6 +10,8 @@ clone this repo into `$GOPATH/src/github.com/codeuniversity/ppp-profiler`.
 
 Run `make install dep run` in the `ppp-profiler` directory.
 
+To see how to change the default configuration, run ` go run main/main.go -h`
+
 ## endpoints
 
 - `/` endpoint that listens for websocket connections
