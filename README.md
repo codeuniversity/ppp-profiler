@@ -1,6 +1,14 @@
 # ppp-profiler
 
+
 This service listens to realtime updates from [mhist](https://github.com/codeuniversity/ppp-mhist/), which are evaluated with scripts that are sent through a http-endpoint. The output is a state of a card that is then shown in some kind of frontend, that receives the updated card state via websocket.
+
+## setup 
+
+assuming you have a working go installation:
+clone this repo into `$GOPATH/src/github.com/codeuniversity/ppp-profiler`.
+
+Run `make install dep run` in the `ppp-profiler` directory.
 
 ## endpoints
 
