@@ -26,6 +26,7 @@ var profileBucketName = []byte("profiles")
 
 //Server that listens for new events and serves profiles
 type Server struct {
+	Port             int
 	MhistHTTPAddress string
 	MhistTCPAddress  string
 	incomingChannel  chan []byte
@@ -38,7 +39,7 @@ type Server struct {
 }
 
 //NewServer returns a server ready for usage
-func NewServer(httpAddress string, tcpAddress string) *Server {
+func NewServer(port int, httpAddress string, tcpAddress string) *Server {
 	incomingChannel := make(chan []byte)
 
 	os.MkdirAll(dbPath, os.ModePerm)
@@ -65,6 +66,7 @@ func NewServer(httpAddress string, tcpAddress string) *Server {
 	}
 
 	s := &Server{
+		Port:             port,
 		MhistHTTPAddress: httpAddress,
 		MhistTCPAddress:  tcpAddress,
 		incomingChannel:  incomingChannel,
@@ -99,7 +101,7 @@ func (s *Server) Listen() {
 		AllowedMethods: []string{"GET", "POST", "DELETE", "PUT"},
 	})
 
-	http.ListenAndServe(":4000", c.Handler(r))
+	http.ListenAndServe(fmt.Sprintf(":%v", s.Port), c.Handler(r))
 }
 
 //Run the server and listen for messages
