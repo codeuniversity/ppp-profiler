@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/rs/cors"
 )
 
 var dbPath = "data"
@@ -26,18 +26,20 @@ var profileBucketName = []byte("profiles")
 
 //Server that listens for new events and serves profiles
 type Server struct {
-	Address         string
-	incomingChannel chan []byte
-	subscriber      *mhist.TCPSubscriber
-	conns           []*websocket.Conn
-	profiles        []*Profile
-	connLock        *sync.RWMutex
-	profileLock     *sync.RWMutex
-	db              *bolt.DB
+	Port             int
+	MhistHTTPAddress string
+	MhistTCPAddress  string
+	incomingChannel  chan []byte
+	subscriber       *mhist.TCPSubscriber
+	conns            []*websocket.Conn
+	profiles         []*Profile
+	connLock         *sync.RWMutex
+	profileLock      *sync.RWMutex
+	db               *bolt.DB
 }
 
 //NewServer returns a server ready for usage
-func NewServer(address string) *Server {
+func NewServer(port int, httpAddress string, tcpAddress string) *Server {
 	incomingChannel := make(chan []byte)
 
 	os.MkdirAll(dbPath, os.ModePerm)
@@ -64,12 +66,14 @@ func NewServer(address string) *Server {
 	}
 
 	s := &Server{
-		Address:         address,
-		incomingChannel: incomingChannel,
-		subscriber:      mhist.NewTCPSubscriber(address, mhist.FilterDefinition{}, incomingChannel),
-		connLock:        &sync.RWMutex{},
-		profileLock:     &sync.RWMutex{},
-		db:              db,
+		Port:             port,
+		MhistHTTPAddress: httpAddress,
+		MhistTCPAddress:  tcpAddress,
+		incomingChannel:  incomingChannel,
+		subscriber:       mhist.NewTCPSubscriber(tcpAddress, mhist.FilterDefinition{}, incomingChannel),
+		connLock:         &sync.RWMutex{},
+		profileLock:      &sync.RWMutex{},
+		db:               db,
 	}
 
 	s.readProfilesIntoMemory()
@@ -84,14 +88,20 @@ func (s *Server) Connect() {
 	go s.Listen()
 }
 
-//Listen to incoming http requests to be upgraded to websocket connections
+//Listen to incoming http requests
 func (s *Server) Listen() {
 	r := mux.NewRouter()
 	r.HandleFunc("/profiles/{id}", s.profileHandler)
 	r.HandleFunc("/profiles", s.profileHandler)
+	r.HandleFunc("/meta", s.metaHandler)
 	r.HandleFunc("/", s.websocketHandler)
 	http.Handle("/", r)
-	http.ListenAndServe(":4000", nil)
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "DELETE", "PUT"},
+	})
+
+	http.ListenAndServe(fmt.Sprintf(":%v", s.Port), c.Handler(r))
 }
 
 //Run the server and listen for messages
@@ -107,7 +117,15 @@ func (s *Server) Run() {
 		}
 		s.forEachProfile(func(profile *Profile) {
 			profile.Eval(message)
-			s.broadcast(profile.Value())
+			value := profile.Value()
+			message := profileMessage{
+				ID: value.ID,
+				Data: profileMessageContent{
+					Type:  "update",
+					State: &value.Data,
+				},
+			}
+			s.broadcast(message)
 		})
 	}
 }
@@ -153,7 +171,7 @@ func (s *Server) updateProfilesOnDisk() {
 				fmt.Println(err)
 				continue
 			}
-			bucket.Put(itob(profile.Definition.ID), byteSlice)
+			bucket.Put([]byte(profile.Definition.ID), byteSlice)
 
 		}
 		return nil
@@ -177,13 +195,23 @@ func (s *Server) forEachProfile(f func(p *Profile)) {
 	}
 }
 
-func (s *Server) broadcast(d ProfileDisplayValue) {
+type profileMessage struct {
+	ID   string                `json:"id"`
+	Data profileMessageContent `json:"data"`
+}
+
+type profileMessageContent struct {
+	Type  string       `json:"type"`
+	State *ProfileData `json:"state,omitempty"`
+}
+
+func (s *Server) broadcast(m profileMessage) {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 	indicesToRemove := []int{}
 
 	for index, conn := range s.conns {
-		err := conn.WriteJSON(d)
+		err := conn.WriteJSON(m)
 		if err != nil {
 			//assume connection is dead
 			fmt.Println(err)
@@ -220,7 +248,25 @@ func (s *Server) profileHandler(w http.ResponseWriter, r *http.Request) {
 		s.handleProfilesGet(w, r)
 	case http.MethodDelete:
 		s.handleProfileDelete(w, r)
+	case http.MethodPut:
+		s.handleProfileUpdate(w, r)
 	}
+}
+
+func (s *Server) metaHandler(w http.ResponseWriter, r *http.Request) {
+	resp, err := http.Get(fmt.Sprintf("%v/meta", s.MhistHTTPAddress))
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(body)
 }
 
 func (s *Server) handleProfilesGet(w http.ResponseWriter, r *http.Request) {
@@ -250,21 +296,23 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if definition.ID == "" {
+		renderError(errors.New("id has to be set"), w, http.StatusBadRequest)
+	}
+
 	var profile *Profile
 	s.profileLock.Lock()
 	defer s.profileLock.Unlock()
 
 	err = s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(profileBucketName)
-		id, _ := bucket.NextSequence()
-		definition.ID = int(id)
 		profile = NewProfile(*definition)
 		byteSlice, err := json.Marshal(profile)
 		if err != nil {
 			return err
 		}
 
-		return bucket.Put(itob(definition.ID), byteSlice)
+		return bucket.Put([]byte(definition.ID), byteSlice)
 	})
 
 	if err != nil {
@@ -279,19 +327,95 @@ func (s *Server) handleProfilesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(answer)
+
+	value := profile.Value()
+	message := profileMessage{
+		ID: value.ID,
+		Data: profileMessageContent{
+			Type:  "update",
+			State: &value.Data,
+		},
+	}
+	s.broadcast(message)
 }
 
-func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
-	idPart := mux.Vars(r)["id"]
-	if idPart == "" {
-		err := errors.New("you have to specify a profile id to delete")
+func (s *Server) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	idToBeUpdated := mux.Vars(r)["id"]
+	if idToBeUpdated == "" {
+		err := errors.New("you have to specify a profile id to update")
 		renderError(err, w, http.StatusBadRequest)
 		return
 	}
 
-	parsedID, err := strconv.ParseInt(idPart, 10, 64)
-	idToBeDeleted := int(parsedID)
+	byteSlice, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	definitionUpdate := &ProfileDefinitionUpdate{}
+	err = json.Unmarshal(byteSlice, definitionUpdate)
+	if err != nil {
+		renderError(err, w, http.StatusBadRequest)
+		return
+	}
+
+	s.profileLock.Lock()
+	defer s.profileLock.Unlock()
+
+	var inMemoryProfile *Profile
+	for _, profile := range s.profiles {
+		if profile.Definition.ID == idToBeUpdated {
+			inMemoryProfile = profile
+		}
+	}
+
+	if definitionUpdate.EvalScript != nil {
+		inMemoryProfile.Definition.EvalScript = *definitionUpdate.EvalScript
+	}
+
+	if definitionUpdate.Filter != nil {
+		inMemoryProfile.Definition.Filter = *definitionUpdate.Filter
+	}
+
+	if definitionUpdate.IsLocal != nil {
+		inMemoryProfile.Definition.IsLocal = *definitionUpdate.IsLocal
+	}
+
+	if definitionUpdate.LibraryID != nil {
+		inMemoryProfile.Definition.LibraryID = *definitionUpdate.LibraryID
+	}
+
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(profileBucketName)
+		byteSlice, err := json.Marshal(inMemoryProfile)
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put([]byte(inMemoryProfile.Definition.ID), byteSlice)
+	})
+
+	if err != nil {
+		renderError(err, w, http.StatusInternalServerError)
+		return
+	}
+	value := inMemoryProfile.Value()
+	message := profileMessage{
+		ID: value.ID,
+		Data: profileMessageContent{
+			Type:  "update",
+			State: &value.Data,
+		},
+	}
+	s.broadcast(message)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	idToBeDeleted := mux.Vars(r)["id"]
+	if idToBeDeleted == "" {
+		err := errors.New("you have to specify a profile id to delete")
 		renderError(err, w, http.StatusBadRequest)
 		return
 	}
@@ -308,15 +432,22 @@ func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.profiles = newProfileSlice
 
-	err = s.db.Update(func(tx *bolt.Tx) error {
+	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(profileBucketName)
-		return bucket.Delete(itob(idToBeDeleted))
+		return bucket.Delete([]byte(idToBeDeleted))
 	})
 
 	if err != nil {
 		renderError(err, w, http.StatusInternalServerError)
 		return
 	}
+	deleteMessage := profileMessage{
+		ID: idToBeDeleted,
+		Data: profileMessageContent{
+			Type: "delete",
+		},
+	}
+	s.broadcast(deleteMessage)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -332,8 +463,15 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	s.conns = append(s.conns, conn)
 
 	s.forEachProfile(func(profile *Profile) {
-		d := profile.Value()
-		conn.WriteJSON(d)
+		value := profile.Value()
+		message := profileMessage{
+			ID: value.ID,
+			Data: profileMessageContent{
+				Type:  "update",
+				State: &value.Data,
+			},
+		}
+		conn.WriteJSON(message)
 	})
 }
 
